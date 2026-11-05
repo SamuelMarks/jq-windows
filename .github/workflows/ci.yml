@@ -1,0 +1,180 @@
+# =============================================================================
+# .github/workflows/ci.yml - CI/CD Pipeline for jq Windows & DOS
+#
+# Runs Python static analysis (ruff, interrogate, mypy --strict, pytest 100%
+# branch coverage, pre-commit), compiles jq natively with MSVC (x86_64) on
+# windows-latest, executes the CTest functional verification suite, packages
+# portable ZIP, NSIS (.exe), and WiX (.msi) installers via CPack, and publishes
+# release assets to GitHub Releases on v* tags.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+      - '1.*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout jq-windows
+        uses: actions/checkout@master
+
+      - name: Checkout auto-win-msvc
+        uses: actions/checkout@master
+        with:
+          repository: SamuelMarks/auto-win-msvc
+          ref: master
+          path: auto-win-msvc
+
+      - name: Setup Python
+        uses: actions/setup-python@master
+        with:
+          python-version: '3.12'
+
+      - name: Install Python QA & Coverage Tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-cov mypy ruff interrogate pre-commit
+
+      - name: Run Python Unit Tests (100% Coverage), Typing (mypy --strict), and Pre-Commit
+        run: |
+          ruff check scripts tests
+          ruff format --check scripts tests
+          interrogate --fail-under=100 -vv scripts tests
+          mypy --strict scripts tests
+          pytest --cov=scripts --cov=tests --cov-branch --cov-fail-under=100
+          pre-commit run --all-files
+
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout jq-windows
+        uses: actions/checkout@master
+
+      - name: Checkout auto-win-msvc
+        uses: actions/checkout@master
+        with:
+          repository: SamuelMarks/auto-win-msvc
+          ref: master
+          path: auto-win-msvc
+
+      - name: Setup Python
+        uses: actions/setup-python@master
+        with:
+          python-version: '3.12'
+
+      - name: Install Python QA & Coverage Tooling
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-cov mypy ruff interrogate pre-commit
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure CMake
+        shell: cmd
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_AUTO_WIN_MSVC=auto-win-msvc
+
+      - name: Build jq
+        shell: cmd
+        run: |
+          cmake --build build --config Release
+
+      - name: Test jq (CTest)
+        shell: cmd
+        run: |
+          ctest --test-dir build -C Release --output-on-failure
+          build\Release\jq.exe --version
+
+      - name: Run Python Static Analysis and Unit Tests on Windows
+        shell: pwsh
+        run: |
+          ruff check scripts tests
+          ruff format --check scripts tests
+          interrogate --fail-under=100 -vv scripts tests
+          mypy --strict scripts tests
+          pytest --no-cov
+          $env:SKIP = "pytest-coverage,test-coverage-shield"
+          pre-commit run --all-files
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          $nsisPath = if (Test-Path "${env:ProgramFiles(x86)}\NSIS") { "${env:ProgramFiles(x86)}\NSIS" } else { "$env:ProgramFiles\NSIS" }
+          echo "$nsisPath" >> $env:GITHUB_PATH
+          & "$nsisPath\makensis.exe" /VERSION
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          if (-not ($env:WIX -and (Test-Path "$env:WIX\bin\candle.exe")) -and -not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset -y
+          }
+          $wixBin = if ($env:WIX -and (Test-Path "$env:WIX\bin\candle.exe")) {
+            "$env:WIX\bin"
+          } else {
+            (Get-ChildItem "${env:ProgramFiles(x86)}\WiX Toolset*\bin\candle.exe", "$env:ProgramFiles\WiX Toolset*\bin\candle.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).DirectoryName
+          }
+          if ($wixBin) {
+            echo "$wixBin" >> $env:GITHUB_PATH
+            & "$wixBin\candle.exe" -? | Select-Object -First 1
+          }
+
+      - name: Package with CPack
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF -like "refs/tags/*") {
+            $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            "1.8.2"
+          }
+          $pkgVersion = if ($version -match '^\d+\.\d+\.\d+(\.\d+)?$') { $version } else { "1.8.2" }
+          $fileName = "jq-$version-$($env:RUNNER_ARCH)"
+          $setupFileName = "jq-$version-$($env:RUNNER_ARCH)-setup"
+          Push-Location build
+          cpack -C Release -G ZIP -D "CPACK_PACKAGE_VERSION=$pkgVersion" -D "CPACK_PACKAGE_FILE_NAME=$fileName"
+          cpack -C Release -G NSIS -D "CPACK_PACKAGE_VERSION=$pkgVersion" -D "CPACK_PACKAGE_FILE_NAME=$setupFileName"
+          cpack -C Release -G WIX -D "CPACK_PACKAGE_VERSION=$pkgVersion" -D "CPACK_PACKAGE_FILE_NAME=$fileName"
+          Copy-Item "Release\jq.exe" -Destination "$fileName.exe" -Force
+          Pop-Location
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: jq-windows-${{ runner.arch }}-packages
+          path: |
+            build/jq-*-${{ runner.arch }}.exe
+            build/jq-*-${{ runner.arch }}-setup.exe
+            build/jq-*-${{ runner.arch }}.msi
+            build/jq-*-${{ runner.arch }}.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@master
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: jq for Windows ${{ github.ref_name }}
+          files: |
+            build/jq-*-${{ runner.arch }}.exe
+            build/jq-*-${{ runner.arch }}-setup.exe
+            build/jq-*-${{ runner.arch }}.msi
+            build/jq-*-${{ runner.arch }}.zip
+          generate_release_notes: true
