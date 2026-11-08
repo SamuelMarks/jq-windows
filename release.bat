@@ -38,9 +38,10 @@ if errorlevel 1 exit /b 1
 
 echo Packaging with CPack...
 cd %BUILD_DIR%
-cpack -C Release -G ZIP
-cpack -C Release -G NSIS
-cpack -C Release -G WIX
+cpack -C Release -G ZIP -D CPACK_PACKAGE_FILE_NAME=jq-1.8.2-X64
+cpack -C Release -G NSIS -D CPACK_PACKAGE_FILE_NAME=jq-1.8.2-X64-setup
+cpack -C Release -G WIX -D CPACK_PACKAGE_FILE_NAME=jq-1.8.2-X64
+copy /y Release\jq.exe jq-1.8.2-X64.exe >nul
 cd ..
 
 echo Build and packaging complete!
