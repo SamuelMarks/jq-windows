@@ -26,10 +26,12 @@ All POSIX system calls, time/date parsing (`strptime`, `gmtime_r`, `localtime_r`
 ## Releases
 
 Pre-compiled packages are available on the [Releases](../../releases) tab:
-- **Standalone Executable (`jq-*-X64.exe`):** Single-file native MSVC Windows binary.
+- **Standalone Windows Executable (`jq-*-X64.exe`):** Single-file native MSVC Windows binary.
 - **NSIS Setup Installer (`jq-*-X64-setup.exe`):** Windows installer with option to add `jq` to the system `PATH`.
 - **WiX MSI Installer (`jq-*-X64.msi`):** Windows Installer package for enterprise deployments.
-- **Portable ZIP Archive (`jq-*-X64.zip` / `jq-*-dos32.zip`):** Standalone archives for Windows and 32-bit DOS.
+- **Portable Windows ZIP Archive (`jq-*-X64.zip`):** Standalone archive for Windows.
+- **32-bit DOS Executable & CPack ZIP (`jq-*-dos32.exe` / `jq-*-dos32.zip`):** OpenWatcom v2 32-bit DOS executable and portable archive bundling `DOS32A.EXE` and `DOS4GW.EXE`.
+- **MS-DOS 1.25, 2.0, and 4.0 Ready-to-Run Archives (`jq-*-msdos-1.25.zip`, `jq-*-msdos-2.0.zip`, `jq-*-msdos-4.0.zip`):** Version-targeted DOS archives bundling `JQ.EXE` with the appropriate `DOS32A.EXE` runtime for MS-DOS 1.25, 2.0, and 4.0.
 
 ---
 
@@ -56,6 +58,17 @@ Pre-compiled packages are available on the [Releases](../../releases) tab:
 Run `release_dos.bat` (or configure with `-G "Watcom WMake" -DCMAKE_SYSTEM_NAME=DOS`) with OpenWatcom v2 installed at `C:\usr\WATCOM`:
 ```cmd
 release_dos.bat
+```
+
+### MS-DOS 1.25, 2.0, and 4.0 Vagrant Test Suite (`vagrant/dos/Vagrantfile`)
+
+To cross-compile `jq` with OpenWatcom v2 (`wcl386`) and execute the CTest functional test suite inside Microsoft MS-DOS `1.25`, `2.0`, and `4.0` virtual machines (`bento/msdos-1.25`, `bento/msdos-2.0`, `bento/msdos-4.0`):
+
+```sh
+cd vagrant/dos
+vagrant up msdos-1.25 --provider=qemu
+vagrant up msdos-2.0 --provider=qemu
+vagrant up msdos-4.0 --provider=qemu
 ```
 
 ---

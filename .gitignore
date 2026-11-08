@@ -6,6 +6,8 @@ build*/
 _CPack_Packages/
 *.msi
 *.zip
+.vagrant/
+.watcom/
 
 # Forbidden C Sources and Headers in busybox-windows
 # (All C polyfills belong in ../auto-win-msvc; BusyBox changes belong in patches/)
