@@ -229,6 +229,16 @@ jobs:
       - name: Package DOS Builds (dos32, MS-DOS 1.25, MS-DOS 2.0, MS-DOS 4.0)
         run: |
           export WATCOM="/opt/watcom"
+          if [ -d "$WATCOM/binl64" ]; then
+            WATCOM_BIN="$WATCOM/binl64"
+          else
+            WATCOM_BIN="$WATCOM/binl"
+          fi
+          export PATH="$WATCOM_BIN:$WATCOM/binw:$PATH"
+          export INCLUDE="$WATCOM/h"
+          export EDPATH="$WATCOM/eddat"
+          export WIPFC="$WATCOM/wipfc"
+
           if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
@@ -262,7 +272,7 @@ jobs:
               cp -f build_dos/dos32a_legacy.exe "$stage_dir/DOS32A.EXE"
             fi
             cp -f README.md LICENSE-APACHE LICENSE-MIT LICENSE-CC0 "$stage_dir/"
-            (cd "build_dos/pkg_${dos_target}" && zip -r "../../jq-${VERSION}-${dos_target}.zip" "jq-${VERSION}-${dos_target}")
+            (cd "build_dos/pkg_${dos_target}" && zip -r "../jq-${VERSION}-${dos_target}.zip" "jq-${VERSION}-${dos_target}")
             rm -rf "build_dos/pkg_${dos_target}"
           done
           rm -f build_dos/dos32a_legacy.exe
